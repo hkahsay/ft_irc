@@ -20,6 +20,8 @@ class Server {
 		Server(int port, char *password);
 		~Server(void);
 		void	launch( void );
+		void	bind( void );
+
 		void	accept(void);
 		std::string		getProtocolFamilyName(int family);
 		class ServerException : public std::exception {

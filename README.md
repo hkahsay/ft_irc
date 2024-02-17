@@ -22,3 +22,7 @@ FD_SET:
 		FD_ZERO(&read_fd);
 		FD_SET(socket_fd, &read_fd);
 
+
+./ircserv 1337 asd
+
+nc 127.0.01 1337

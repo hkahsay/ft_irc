@@ -11,9 +11,30 @@ Server:: Server(int port, char *password): _port(port), _password(password)
 
 }
 
-Server:: ~Server()
+Server::~Server()
 {
+	int ret = 0;
 
+	for (int i = 0; i < MAX_CONNECTIONS; ++i)
+	{
+		if (all_connections[i] > 0)
+		{
+			ret = close(all_connections[i]);
+			if (ret < 0)
+				std::cerr << "Error while closing socket: " << strerror(errno) << std::endl;
+			else
+				std::cout << "Connection " << i << " closed successfully" << std::endl;
+
+		}
+	}
+
+	ret = close(_servSockfd);
+	if (ret < 0)
+		std::cerr << "Error while closing socket: " << strerror(errno) << std::endl;
+	else
+		std::cout << "Server socket closed successfully" << std::endl;
+	if (_servinfo)
+		freeaddrinfo(_servinfo);
 }
 
 void	Server::launch()
@@ -31,6 +52,7 @@ void	Server::launch()
 		throw Server::ServerException( error_msg.c_str() );
 	}
 	std::cout << "Getting address info successful." << std::endl;
+
 	_servSockfd = socket(PF_INET, SOCK_STREAM, 0);
 		//creates an endpoint for communication and returns a descriptor.
 	if(_servSockfd < 0)
@@ -38,10 +60,34 @@ void	Server::launch()
 		std::string error_msg = "Socket error: " + std::string(strerror(errno));
 		throw ServerException(error_msg.c_str());
 	}
+
 	std::cout << "returns socket descriptor successfully." << std::endl;
+
+	bind();
+	int	status_listen = ::listen(_servSockfd, 10);
+	if (status_listen < 0)
+	{
+		std::string error_msg = "Listen error: " + std::string( strerror(errno) );
+		throw ServerException( error_msg.c_str() );
+	}
+	std::cout << "Socket fd " << _servSockfd << " is listening" << std::endl;
+	accept();
+
+}
+
+void Server::bind()
+{
 	//bind -- bind a name to a socket
 	//bind(int socket, const struct sockaddr *address, socklen_t address_len);
-	int res = bind(_servSockfd, (const struct sockaddr *)&_server_address, sizeof(_server_address));
+	_server_address.sin_family = AF_INET;						// for IPv4
+	_server_address.sin_addr.s_addr = htonl( INADDR_ANY );
+	_server_address.sin_port = htons( _port );
+	bzero( _server_address.sin_zero, sizeof(_server_address.sin_zero ) );
+	int enable = 1;
+	if (setsockopt(_servSockfd, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+    	perror("setsockopt(SO_REUSEADDR) failed");
+	}
+	int res = ::bind(_servSockfd, (const struct sockaddr *)&_server_address, sizeof(_server_address));
 	if (res < 0)
 	{
 		std::string error_msg = "Bind error: " + std::string( strerror(errno) );
@@ -54,16 +100,7 @@ void	Server::launch()
 				<< ntohs(_server_address.sin_port)
 				<< " Address "
 				<< inet_ntoa(_server_address.sin_addr) << std::endl;
-	int	status_listen = ::listen( _servSockfd, MAX_CONNECTIONS );
-	if (status_listen < 0)
-	{
-		std::string error_msg = "Listen error: " + std::string( strerror(errno) );
-		throw ServerException( error_msg.c_str() );
-	}
-	std::cout << "Socket fd " << _servSockfd << " is listening" << std::endl;
-	accept();
-
-
+	
 }
 
 void	Server::accept(void)
@@ -90,7 +127,7 @@ void	Server::accept(void)
 		}
 		/* Invoke select() and then wait! */
 		printf("\nUsing select() to listen for incoming events\n");
-		ret_val = select(_servSockfd, &read_fd, NULL, NULL, NULL);
+		ret_val = select(FD_SETSIZE, &read_fd, NULL, NULL, NULL);
 		/* select() woke up. Identify the fd that has events */
 		if (ret_val >= 0)
 		{
